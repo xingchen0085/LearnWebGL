@@ -1,0 +1,105 @@
+<html>
+    <head>
+        <title>Hello Webgl</title>
+    </head>
+    <body onload="main()">
+        <canvas id="c" width="400" height="300"></canvas>
+    </body>
+
+    <script id="vertex-shader-script" type="notjs">
+        attribute vec4 a_Position;
+        void main(){
+            gl_Position = a_Position;
+			gl_PointSize = 10.0;
+        }
+    </script>
+
+    <script id="fragm-shader-script" type="notjs">
+        precision mediump float;
+		uniform vec4 u_FragColor;
+        void main(){
+            gl_FragColor = u_FragColor;
+        }
+    </script>
+
+    <script type="text/javascript">
+
+        function main(){
+            var canvas = document.getElementById("c");
+            var gl = canvas.getContext("webgl");
+            if(!gl){
+                console.error("not supported webgl!");
+            }
+
+            //shader
+            var vertexShaderText = document.getElementById("vertex-shader-script").text;
+            var fragmShaderText = document.getElementById("fragm-shader-script").text;
+            var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderText);
+            var fragmShader = createShader(gl, gl.FRAGMENT_SHADER, fragmShaderText);
+
+            var program = createProgram(gl, vertexShader, fragmShader);
+
+            var a_Position = gl.getAttribLocation(program, "a_Position");
+			if(a_Position < 0){
+				log.error("a_Position not find.");
+				return;
+			}
+            
+            var positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            var positions = 
+            [
+                0, 0.5,
+                -0.5, -0.5,
+                0.5, -0.5
+            ];
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+           
+            gl.vertexAttribPointer(a_Position, 2, gl.FLOAT, false, 0, 0);
+            //启用缓冲中的数据给着色器属性
+            gl.enableVertexAttribArray(a_Position);
+            gl.useProgram(program);
+
+			var u_FragColor = gl.getUniformLocation(program, "u_FragColor");
+			if(!u_FragColor){
+				log.error("u_FragColor not find.");
+				return;
+			}
+            gl.uniform4f(u_FragColor, Math.random(), Math.random(), Math.random(), 1.0);
+
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
+
+        function createProgram(gl, vertexShader, fragmShader) {
+            var program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmShader);
+            gl.linkProgram(program);
+
+            var suc = gl.getProgramParameter(program, gl.LINK_STATUS);
+            if(suc){
+                return program;
+            }
+            console.log(gl.getProgramInfoLog(program));
+            gl.deleteProgram(program);
+        }
+
+
+        //创建着色器方法
+        function createShader(gl, type, source) {
+            var shader = gl.createShader(type);//create
+            gl.shaderSource(shader, source);//source
+            gl.compileShader(shader);//compile
+            var suc = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+            if(!suc){
+                console.log(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+    </script>
+</html>

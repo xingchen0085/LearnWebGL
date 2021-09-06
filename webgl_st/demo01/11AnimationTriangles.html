@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>document</title>
+</head>
+<body onload="main()">
+<canvas id="canvas" height="400" width="400">
+    你的浏览器不支持WebGL，请更换新的浏览器
+</canvas>
+</body>
+
+<script type='text/javascript' src='../lib/webgl-utils.js'></script>
+<script type='text/javascript' src='../lib/webgl-debug.js'></script>
+<script type='text/javascript' src='../lib/cuon-utils.js'></script>
+<script type='text/javascript' src='../lib/cuon-matrix.js'></script>
+<script>
+
+	//顶点着色器
+	var VSHADER_SOURCE = "attribute vec4 a_Position;\n" +
+                         "uniform mat4 u_TransformMatrix; " +
+						 "void main() {\n" +
+						 "    gl_Position = u_TransformMatrix * a_Position;\n" +
+						 "    gl_PointSize = 5.0;\n" +
+						 "}";
+	//片元着色器
+	var FSHADER_SOURCE =  "precision mediump float;\n" +
+						  "uniform vec4 u_FragColor;\n" +
+						  "void main() {\n" +
+						  "    gl_FragColor = u_FragColor;\n" +
+						  "}"
+	
+    function main() {
+		//获得dom
+		var canvas = document.getElementById('canvas');
+		
+		//获得gl context
+		var gl = canvas.getContext('webgl');
+		if(!gl){
+			console.error('not supported webgl');
+			return;
+		}
+		
+		//初始化着色器
+		initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE);
+		
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        var n = initVertextBuffer(gl);
+        if(n < 0){
+            console.error('initVertextBuffer failed');
+			return;
+        }
+
+        //test
+        var u_TransformMatrix = gl.getUniformLocation(gl.program, 'u_TransformMatrix');
+        if(!u_TransformMatrix){
+            console.error('u_TransformMatrix not defined!');
+			return;
+        }
+        var x_TransformMatrix = new Matrix4();
+        x_TransformMatrix.setRotate(0.0, 0.0, 0.0, 1);
+        gl.uniformMatrix4fv(u_TransformMatrix, false, x_TransformMatrix.elements);
+
+        var u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
+        if(!u_FragColor){
+            console.error('u_FragColor not defined!');
+			return;
+        }
+        gl.uniform4f(u_FragColor, 1.0, 0.0, 0.0, 1.0);
+
+        //gl.drawArrays(gl.TRIANGLES, 0, n);
+
+        animation(gl, u_TransformMatrix, x_TransformMatrix, n);
+
+    }
+
+
+    //init buffer
+    function initVertextBuffer(gl){
+        var n = 3;
+
+        var vertextPoints = new Float32Array([
+            0, 0.5, 
+            -0.5, -0.5, 
+            0.5, -0.5
+        ]);
+
+        var size = vertextPoints.BYTES_PER_ELEMENT;
+
+        var vertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, vertextPoints, gl.STATIC_DRAW);
+        var a_Position = gl.getAttribLocation(gl.program, 'a_Position');
+        if(a_Position < 0){
+            console.error('a_Position not defined!');
+			return -1;
+        }
+        gl.vertexAttribPointer(a_Position, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(a_Position);
+
+        return n;
+    }
+
+
+    function animation(gl, u_TransformMatrix, x_TransformMatrix, n){
+
+        //当前角度
+        var currentAngle = 0.0;
+
+        var tick = function(){
+            //console.log("tick");
+            currentAngle = resovleAngle(currentAngle);
+            x_TransformMatrix.setRotate(currentAngle, 0.0, 0.0, 1.0);
+            x_TransformMatrix.translate(0.35, 0.3, 0.0);
+            gl.uniformMatrix4fv(u_TransformMatrix, false, x_TransformMatrix.elements);
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.TRIANGLES, 0, n);
+
+            requestAnimationFrame(tick);//请求浏览器调用tick
+        }
+
+        tick();
+    }
+
+
+    //上一次时间
+    var lastDt = Date.now();
+    //每秒旋转角度
+    var angleStep = 45.0;
+
+    function resovleAngle(angle){
+        var now = Date.now();
+        var elapsed = now - lastDt;
+        lastDt = now;
+
+        var newAngle =  angle +  (angleStep * elapsed) / 1000.0;
+
+        angle = newAngle % 360.0;
+
+        console.log(angle);
+        return angle;
+    }
+</script>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body onload="main()">
+<canvas id="canvas" height="400" width="400">
+    你的浏览器不支持WebGL，请更换新的浏览器
+</canvas>
+</body>
+
+<script type='text/javascript' src='../lib/webgl-utils.js'></script>
+<script type='text/javascript' src='../lib/webgl-debug.js'></script>
+<script type='text/javascript' src='../lib/cuon-utils.js'></script>
+<script>
+    function main() {
+		//获得dom
+		var canvas = document.getElementById('canvas');
+		
+		//获得gl context
+		var gl = canvas.getContext('webgl');
+		if(!gl){
+			console.err('浏览器不支持webgl');
+			return;
+		}
+		
+		//指定一个清空颜色
+		gl.clearColor(0.0, 0.0, 0.0, 1.0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
+    }
+</script>
+</html>

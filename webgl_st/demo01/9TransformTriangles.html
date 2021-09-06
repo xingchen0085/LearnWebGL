@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>document</title>
+</head>
+<body onload="main()">
+<canvas id="canvas" height="400" width="400">
+    你的浏览器不支持WebGL，请更换新的浏览器
+</canvas>
+</body>
+
+<script type='text/javascript' src='../lib/webgl-utils.js'></script>
+<script type='text/javascript' src='../lib/webgl-debug.js'></script>
+<script type='text/javascript' src='../lib/cuon-utils.js'></script>
+<script>
+
+	//顶点着色器
+	var VSHADER_SOURCE = "attribute vec4 a_Position;\n" +
+                         "uniform mat4 u_TransformMatrix; " +
+						 "void main() {\n" +
+						 "    gl_Position = u_TransformMatrix * a_Position;\n" +
+						 "    gl_PointSize = 5.0;\n" +
+						 "}";
+	//片元着色器
+	var FSHADER_SOURCE =  "precision mediump float;\n" +
+						  "uniform vec4 u_FragColor;\n" +
+						  "void main() {\n" +
+						  "    gl_FragColor = u_FragColor;\n" +
+						  "}"
+	
+    function main() {
+		//获得dom
+		var canvas = document.getElementById('canvas');
+		
+		//获得gl context
+		var gl = canvas.getContext('webgl');
+		if(!gl){
+			console.error('浏览器不支持webgl');
+			return;
+		}
+		
+		//初始化着色器
+		initShaders(gl, VSHADER_SOURCE, FSHADER_SOURCE);
+		
+		//获取变量位置
+		var a_Position = gl.getAttribLocation(gl.program, 'a_Position');
+		if(a_Position < 0){
+			console.error('无法获取变量地址 a_Position');
+			return;
+		}
+		var u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
+		if(!u_FragColor){
+			console.error('无法获取变量地址 u_FragColor');
+			return;
+		}
+		//赋值
+		gl.vertexAttrib4f(a_Position, 0.0, 0.0, 0.0, 1.0);
+		gl.uniform4f(u_FragColor, 1.0, 0.0, 0.0, 1.0);
+
+        //初始化缓冲区
+        var n = initVertexBuffer(gl, a_Position);
+        if(n < 0){
+            log.error("initVertexBuffer failed!");
+            return;
+        }
+
+        transformVertex(gl);
+
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+	    gl.clear(gl.COLOR_BUFFER_BIT);
+
+        //gl.PONINTS 点
+        //gl.LINES 线段
+        //gl.LINE_STRIP 线条
+        //gl.LINE_LOOP 回路
+        //gl.TRIANGLES 三角形
+        //gl.TRIANGLE_STRIP 三角带
+        gl.drawArrays(gl.TRIANGLES, 0, n);
+    }
+
+    function initVertexBuffer(gl, a_Position){
+        //顶点数量
+        var n = 3; 
+        var vertexPoints = new Float32Array(
+            [0, 0.5, -0.5, -0.5, 0.5, -0.5]
+        );
+
+        //1. create
+        var vertextBuffer = gl.createBuffer();
+        if(!vertextBuffer){ 
+            log.error("vertexBuffer init failed!");
+            return -1;
+        }
+
+        //2. bind
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertextBuffer);
+
+        //3. bufferData
+        //gl.ARRAY_BUFFER/gl.ELEMENT_ARRAY_BUFFER     
+        //gl.STATIC_DRAW/gl.STREAM_DRAW/g.DYNAMIC_DRAW
+        gl.bufferData(gl.ARRAY_BUFFER, vertexPoints, gl.STATIC_DRAW);
+
+        //4. attr
+        //2-->分量，数组内容映射到坐标  false -> normalize单位化向量? 
+        gl.vertexAttribPointer(a_Position, 2, gl.FLOAT, false, 0, 0);
+
+        //5. enable
+        gl.enableVertexAttribArray(a_Position);
+
+        return n;
+    }
+
+    function transformVertex(gl){
+        //平移
+        var tx = 0.5,ty = 0.5, tz = 0;
+        //旋转角度
+        var ANGLE = 90.0;
+        //缩放
+        var sx = 1.5, sy = 1.5, sz= 0;
+
+        //弧度计算
+        var radian = Math.PI * ANGLE / 180.0;
+
+        var cosB = Math.cos(radian);
+        var sinB = Math.sin(radian);
+
+        //单独旋转
+        // var x_TransformMatrix = new Float32Array([
+        //     cosB, sinB, 0, 0, 
+        //     -sinB, cosB, 0, 0, 
+        //     0, 0, 1, 0,
+        //     0, 0, 0, 1
+        // ]);
+
+        // 平移+旋转
+        // var x_TransformMatrix = new Float32Array([
+        //     cosB, sinB, 0, 0, 
+        //     -sinB, cosB, 0, 0, 
+        //     0, 0, 1, 0,
+        //     tx, ty, tz, 1
+        // ]);
+
+        //缩放
+        var x_TransformMatrix = new Float32Array([
+            sx, 0, 0, 0, 
+            -0, sy, 0, 0, 
+            0, 0, 0, sz,
+            0, 0, 0, 1
+        ]);
+
+        var u_TransformMatrix = gl.getUniformLocation(gl.program, 'u_TransformMatrix');
+        if(!u_TransformMatrix){
+			console.error('无法获取变量地址 u_TransformMatrix');
+			return;
+		}
+        gl.uniformMatrix4fv(u_TransformMatrix, false, x_TransformMatrix);
+    }
+</script>
+</html>

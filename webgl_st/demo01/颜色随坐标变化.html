@@ -1,0 +1,75 @@
+<html>
+    <head>
+        <title>颜色随坐标变化的三角形</title>
+    </head>
+    <body onload="main()">
+        <canvas id = "c" width = "400" height = "300"></canvas>
+    </body>
+
+    <script id = "vertex-shader-script" type="notjs">
+        attribute vec4 a_Position;
+        varying vec4 v_Position;
+        void main(){
+            gl_Position = a_Position;
+            v_Position = a_Position;
+        }
+    </script>
+
+    <script id = "fragment-shader-script" type = "notjs">
+        precision mediump float;
+        varying vec4 v_Position;
+        void main(){
+            gl_FragColor = v_Position * 0.5 + 0.5;
+        }
+    </script>
+
+    <script src = "../lib/webgl-utils.js"></script>
+    <script src = "../lib/webgl-debug.js"></script>
+    <script src = "../lib/cuon-utils.js"></script>
+    <script type = "text/javascript">
+        function main(){
+            var canvas = document.getElementById("c");
+            var gl = canvas.getContext("webgl");
+            if(!gl){
+                log("not supported webgl.");
+                return;
+            }
+
+            if(!initShaders(gl, document.getElementById("vertex-shader-script").text, document.getElementById("fragment-shader-script").text)){
+                log("init shader failed.");
+                return;
+            }
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            var n = initVertexBuffer(gl);
+            if(n > 0){
+                gl.drawArrays(gl.TRIANGLES, 0, n);
+            }
+        }
+
+        function initVertexBuffer(gl){
+            var n = 3;
+            var positions = [
+                0.9, 0.7,
+                -0.7, -0.9,
+                0.9, -0.9
+            ];
+
+            var a_Position = gl.getAttribLocation(gl.program, "a_Position");
+            if(a_Position < 0){
+                log("a_Position not find.");
+                return -1;
+            }
+
+            var vertexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+            gl.vertexAttribPointer(a_Position, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(a_Position);
+
+            return n;
+        }
+    </script>
+</html>
