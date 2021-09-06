@@ -24,40 +24,71 @@
     attribute vec4 a_position;
     //uniform vec4 u_baseColor;
     attribute vec4 a_baseColor;
-    varying vec4 v_baseColor;
     uniform mat4 u_mvpMatrix;
     attribute vec4 a_normal;
     uniform vec3 u_lightColor;
     uniform vec3 u_lightDirection;//需要normalize
     uniform vec3 u_ambientLightColor;//环境光颜色
     uniform mat4 u_normalMatrix;//运动物体的法线重计算：物体的线性运动矩阵的逆矩阵
+    uniform vec3 u_lightPos;//点光源位置
+    uniform mat4 u_modelPosmatrix;//几何体世界坐标矩阵
+    attribute vec2 a_texcoord;
+
+    varying vec4 v_baseColor;
+    varying vec3 v_normal;
+    varying vec4 v_modelPosmatrix;
+    varying vec3 v_surfaceDirection;
+    varying vec3 v_lightColor;
+    varying vec3 v_ambientLightColor;
+    varying vec2 v_texcoord;
+
     void main(){
         gl_Position = u_mvpMatrix * a_position;
-        //gl_Position = a_position;
-        gl_PointSize = 5.0;
 
-        //漫反射 光照计算
-        vec3 normal = normalize(vec3(u_normalMatrix * a_normal));
-        float nDot = max(dot(u_lightDirection, normal),0.0);//光线和法线夹角
-        vec3 diffuse = u_lightColor * a_baseColor.rgb * nDot;//直射光漫反射
-        vec3 ambient = vec3(u_ambientLightColor * a_baseColor.rgb);//环境光漫反射
-        v_baseColor = vec4(diffuse + ambient, a_baseColor.a);
+        v_baseColor = a_baseColor;
+        v_normal = vec3(u_normalMatrix * normalize(a_normal));
+        v_surfaceDirection = (u_modelPosmatrix * a_position).xyz - u_lightPos;
+        v_lightColor = u_lightColor;
+        v_ambientLightColor = u_ambientLightColor;
+
+        v_texcoord = a_texcoord;
     }
 </script>
 <script type="notjs" id="fragement-shader-3d">
     precision mediump float;
+    uniform float u_time;
     varying vec4 v_baseColor;
+    varying vec3 v_normal;
+    varying vec3 v_surfaceDirection;
+    varying vec3 v_lightColor;
+    varying vec3 v_ambientLightColor;
+    varying vec2 v_texcoord;
+    uniform sampler2D u_texture;
+
     void main() {
-        gl_FragColor = v_baseColor;
+        vec3 normal = normalize(v_normal);
+        float nDot = max(dot(normalize(v_surfaceDirection), normal),0.0);
+        vec3 diffuse = v_lightColor * v_baseColor.rgb * nDot;//直射光漫反射
+        vec3 ambient = vec3(v_ambientLightColor * v_baseColor.rgb);//环境光漫反射
+        //gl_FragColor = vec4(diffuse + ambient.rgb, v_baseColor.a);
+        gl_FragColor = texture2D(u_texture, v_texcoord) * vec4(abs(sin(u_time)), (diffuse + ambient.rgb).gb, v_baseColor.a);
     }
 </script>
 <script type="text/javascript">
 
+
     function main(){
+        var startTime = Date.now();
+
         let modelRotator = [15, -17, 0];
-        let lightColor = [1.0, 1.0, 1.0];//直射白光颜色
-        let lightDirection = [0, 0.5, 1];//方向
-        let ambientLightColor = [0.1, 0.1, 0.2];//环境光颜色
+        //直射白光颜色
+        let lightColor = [1.0, 1.0, 1.0];
+        //方向
+        let lightDirection = [0, 0.7, 1];
+        //环境光颜色
+        let ambientLightColor = [0.1, 0.1, 0.1];
+        //点光源位置
+        let lightPos = [20, 30, -800];
 
         var canvas = document.getElementById("c");
         var gl = canvas.getContext("webgl");
@@ -74,6 +105,11 @@
         var u_lightDirection = gl.getUniformLocation(program, "u_lightDirection");
         var u_ambientLightColor = gl.getUniformLocation(program, "u_ambientLightColor");
         var u_normalMatrix = gl.getUniformLocation(program, "u_normalMatrix");
+        var u_lightPos = gl.getUniformLocation(program, "u_lightPos");
+        var u_modelPosmatrix = gl.getUniformLocation(program, "u_modelPosmatrix");
+        var a_texcoord = gl.getAttribLocation(program, "a_texcoord");
+        var u_texture = gl.getUniformLocation(program, "u_texture");
+        var u_time = gl.getUniformLocation(program, "u_time");
 
         var positionBuffer = gl.createBuffer();
         var n = setGeometry();
@@ -84,6 +120,11 @@
 
         var normalBuffer = gl.createBuffer();
         setNormal();
+
+        var texcoordBuffer = gl.createBuffer();
+        setTexcoord();
+
+        setTexture();
 
         render();
 
@@ -103,8 +144,8 @@
             gl.useProgram(program);
 
             //mvp
-            var near = -400;
-            var far = 400;
+            var near = -800;
+            var far = 100000;
             var projectMatrix = m4.orthographic(-gl.canvas.clientWidth, gl.canvas.clientWidth, -gl.canvas.clientHeight, gl.canvas.clientHeight, near, far);//p
             var cameraPos = [0, 0, 100];
             var target = [0.0, 0.0, 0.0];
@@ -115,10 +156,11 @@
             modelMatrix = m4.xRotate(modelMatrix, radians(modelRotator[0]));
             modelMatrix = m4.yRotate(modelMatrix, radians(modelRotator[1]));
             modelMatrix = m4.zRotate(modelMatrix, radians(modelRotator[2]));
-            modelMatrix = m4.scale(modelMatrix, 5, 5, 5);
+            modelMatrix = m4.scale(modelMatrix, 10, 10, 10);
             var mvpMatrix = m4.multiply(projectMatrix, viewMatrix);
             mvpMatrix = m4.multiply(mvpMatrix, modelMatrix);
             gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrix);
+            
             var normalMatrix = m4.inverse(modelMatrix);
             m4.transpose(normalMatrix, normalMatrix);
             gl.uniformMatrix4fv(u_normalMatrix, false, normalMatrix);
@@ -134,12 +176,23 @@
             gl.uniform3fv(u_lightColor, lightColor);
             gl.uniform3fv(u_lightDirection, m4.normalize(lightDirection));
             gl.uniform3fv(u_ambientLightColor, m4.normalize(ambientLightColor));
-            console.log('归一化平行光线的方向' + m4.normalize(lightDirection))
+            gl.uniform3fv(u_lightPos, lightPos);
+            gl.uniformMatrix4fv(u_modelPosmatrix, false, modelMatrix)
 
             gl.enableVertexAttribArray(a_normal);
             gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
             gl.vertexAttribPointer(a_normal, 3, gl.FLOAT, true, 0, 0);
 
+            gl.enableVertexAttribArray(a_texcoord);
+            gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
+            gl.vertexAttribPointer(a_texcoord, 2, gl.FLOAT, true, 0, 0);
+
+            //纹理
+            gl.uniform1i(u_texture, 0);
+
+            var tick = (Date.now() - startTime) / 1000.0;
+            gl.uniform1f(u_time, tick);
+            console.log(tick);
 
             gl.drawArrays(gl.TRIANGLES, 0, n);
             //gl.drawElements(gl.TRIANGLES, indicesLen, gl.UNSIGNED_BYTE, 0);
@@ -156,11 +209,11 @@
             //  |/      |/
             //  v2------v3
             // 0, 1, 2,   0, 2, 3,    // 前
-            //     0, 3, 4,   0, 4, 5,    // 右
-            //     0, 5, 6,   0, 6, 1,    // 上
-            //     1, 6, 7,   1, 7, 2,    // 左
-            //     7, 4, 3,   7, 3, 2,    // 下
-            //     4, 7, 6,   4, 6, 5     // 后
+            // 0, 3, 4,   0, 4, 5,    // 右
+            // 0, 5, 6,   0, 6, 1,    // 上
+            // 1, 6, 7,   1, 7, 2,    // 左
+            // 7, 4, 3,   7, 3, 2,    // 下
+            // 4, 7, 6,   4, 6, 5     // 后
 
             var positions = [
                 // v0-v1-v2-v3 front
@@ -339,6 +392,92 @@
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
         }
 
+        function setTexcoord(){
+            // 0, 1, 2,   0, 2, 3,    // 前
+            // 0, 3, 4,   0, 4, 5,    // 右
+            // 0, 5, 6,   0, 6, 1,    // 上
+            // 1, 6, 7,   1, 7, 2,    // 左
+            // 7, 4, 3,   7, 3, 2,    // 下
+            // 4, 7, 6,   4, 6, 5     // 后
+            var texcoord = [
+                // 前
+                0.25   , 1  ,
+                0   , 1,
+                0, 0.5,
+                0.25   , 1,
+                0, 0.5,
+                0.25, 0.5  ,
+                // 右
+                0.25 , 1  ,
+                0.25, 0.5,
+                0.5, 1  ,
+                0.5, 1  ,
+                0.25, 0.5,
+                0.5 , 0.5,
+                // 上
+                0.75 , 1  ,
+                0.5 , 1,
+                0.5, 0.5  ,
+                0.75 , 1  ,
+                0.5, 0.5  ,
+                0.75, 0.5  ,
+                // 左
+                0.25   , 0.5,
+                0, 0.5,
+                0   , 0  ,
+                0.25   , 0.5,
+                0   , 0  ,
+                0.25, 0  ,
+                // 下
+                0.5, 0.5,
+                0.25, 0.5  ,
+                0.25 , 0.0,
+                0.5, 0.5,
+                0.25 , 0.0,
+                0.5 , 0,
+                // 后
+                0.75 , 0.5,
+                0.5, 0.5,
+                0.5 , 0  ,
+                0.75 , 0.5,
+                0.5 , 0  ,
+                0.75, 0  ,
+            ]
+            gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texcoord), gl.STATIC_DRAW);
+        }
+
+        function setTexture(){
+            var texure = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texure);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]))
+
+            var image = new Image();
+            image.src = "image/front.png";
+            image.addEventListener("load", function (){
+                console.log("图片加载完毕");
+                gl.bindTexture(gl.TEXTURE_2D, texure);
+                //y轴反转
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+                //每个分量值 * n
+                //gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 10);
+                //开启0号 默认开启
+                gl.activeTexture(gl.TEXTURE0);
+
+                //纹理参数
+                //放大应该咋处理?
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);//gl.LINEAR
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);//gl.LINEAR
+
+                //texImage2D(target, level, internalformat, format, type, source): void;
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);//0号
+
+                gl.generateMipmap(gl.TEXTURE_2D);
+
+                render();
+            })
+        }
+
         //立方体
         function setCube(){
             var cubeVerticeInfo = primitives.createCubeVertices(10);
@@ -377,7 +516,6 @@
         function xAxis(value){
             var newAngle = modelRotator[0] + angleAxis * value;
             modelRotator[0] = newAngle % 360;
-            console.log(modelRotator)
             render();
         }
 
@@ -388,17 +526,17 @@
         }
 
         function setupAnimatoin(){
-            //requestAnimationFrame(rotateModel);
+            requestAnimationFrame(rotateModel);
         }
 
         var lastTime = Date.now();
-        var angleAxis = 45;//每秒45度
+        var angleAxis = 5;//每秒45度
         function rotateModel(){
             var now = Date.now();
             var during = now - lastTime;
             lastTime = now;
 
-            var xRotator = modelRotator[0] + (angleAxis * during) / 1000.0;
+            var xRotator = modelRotator[0] - (angleAxis * during) / 1000.0;
             var yRotator = modelRotator[1] + (angleAxis * during) / 1000.0;
 
             modelRotator[0] = xRotator % 360.0;
