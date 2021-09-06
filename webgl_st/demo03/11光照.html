@@ -18,16 +18,17 @@
     uniform mat4 u_mvpMatrix;
     attribute vec4 a_normal;
     uniform vec3 u_lightColor;
-    uniform vec3 u_lightPosition;//需要normalize
+    uniform vec3 u_lightDirection;//需要normalize
     uniform vec3 u_ambientLightColor;//环境光颜色
+    uniform mat4 u_normalMatrix;//运动物体的法线重计算：物体的线性运动矩阵的逆矩阵
     void main(){
         gl_Position = u_mvpMatrix * a_position;
         //gl_Position = a_position;
         gl_PointSize = 5.0;
 
         //漫反射 光照计算
-        vec3 normal = normalize(vec3(a_normal));
-        float nDot = max(dot(u_lightPosition, normal),0.0);//光线和法线夹角
+        vec3 normal = normalize(vec3(u_NormalMatrix * a_normal));
+        float nDot = max(dot(u_lightDirection, normal),0.0);//光线和法线夹角
         vec3 diffuse = u_lightColor * u_baseColor.rgb * nDot;//直射光漫反射
         vec3 ambient = vec3(u_ambientLightColor * u_baseColor.rgb);//环境光漫反射
         v_baseColor = vec4(diffuse + ambient, u_baseColor.a);
@@ -41,10 +42,10 @@
     }
 </script>
 <script type="text/javascript">
-    var modelRotator = [15, -17, 0];
-    var lightColor = [1.0, 1.0, 1.0];//直射白光颜色
-    var lightPosition = [150, 100, 200];//位置
-    var ambientLightColor = [0.1, 0.1, 0.2];//环境光颜色
+    let modelRotator = [15, -17, 0];
+    let lightColor = [1.0, 1.0, 1.0];//直射白光颜色
+    let lightDirection = [150, 100, 200];//位置
+    let ambientLightColor = [0.1, 0.1, 0.2];//环境光颜色
 
     function main(){
         var canvas = document.getElementById("c");
@@ -59,8 +60,9 @@
         var u_mvpMatrix = gl.getUniformLocation(program, "u_mvpMatrix");
         var a_normal = gl.getAttribLocation(program, "a_normal");
         var u_lightColor = gl.getUniformLocation(program, "u_lightColor");
-        var u_lightPosition = gl.getUniformLocation(program, "u_lightPosition");
+        var u_lightDirection = gl.getUniformLocation(program, "u_lightDirection");
         var u_ambientLightColor = gl.getUniformLocation(program, "u_ambientLightColor");
+        var u_normalMatrix = gl.getUniformLocation(program, "u_normalMatrix");
 
         var positionBuffer = gl.createBuffer();
         var n = setGeometry();
@@ -100,9 +102,11 @@
             modelMatrix = m4.xRotate(modelMatrix, radians(modelRotator[0]));
             modelMatrix = m4.yRotate(modelMatrix, radians(modelRotator[1]));
             modelMatrix = m4.zRotate(modelMatrix, radians(modelRotator[2]));
+            modelMatrix = m4.scale(modelMatrix, 1.5, 1.5, 1.5);
             var mvpMatrix = m4.multiply(projectMatrix, viewMatrix);
             mvpMatrix = m4.multiply(mvpMatrix, modelMatrix);
             gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrix);
+
 
             gl.enableVertexAttribArray(a_position);
             gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -113,7 +117,7 @@
             // gl.vertexAttribPointer(a_baseColor, 3, gl.UNSIGNED_BYTE, true, 0, 0);
             gl.uniform4fv(u_baseColor, [0.2, 1, 0.2, 1]);
             gl.uniform3fv(u_lightColor, lightColor);
-            gl.uniform3fv(u_lightPosition, m4.normalize(lightPosition));
+            gl.uniform3fv(u_lightDirection, m4.normalize(lightDirection));
             gl.uniform3fv(u_ambientLightColor, m4.normalize(ambientLightColor));
 
             gl.enableVertexAttribArray(a_normal);
