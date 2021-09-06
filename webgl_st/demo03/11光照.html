@@ -12,15 +12,25 @@
 <script type="text/javascript" src="lib/primitives.js"></script>
 <script type="notjs" id="vertex-shader-3d">
     attribute vec4 a_position;
-    //uniform vec4 u_baseColor;
-    attribute vec4 a_baseColor;
+    uniform vec4 u_baseColor;
+    //attribute vec4 a_baseColor;
     varying vec4 v_baseColor;
     uniform mat4 u_mvpMatrix;
+    attribute vec4 a_normal;
+    uniform vec3 u_lightColor;
+    uniform vec3 u_lightPosition;//需要normalize
+    uniform vec3 u_ambientLightColor;//环境光颜色
     void main(){
         gl_Position = u_mvpMatrix * a_position;
         //gl_Position = a_position;
         gl_PointSize = 5.0;
-        v_baseColor = a_baseColor;
+
+        //漫反射 光照计算
+        vec3 normal = normalize(vec3(a_normal));
+        float nDot = max(dot(u_lightPosition, normal),0.0);//光线和法线夹角
+        vec3 diffuse = u_lightColor * u_baseColor.rgb * nDot;//直射光漫反射
+        vec3 ambient = vec3(u_ambientLightColor * u_baseColor.rgb);//环境光漫反射
+        v_baseColor = vec4(diffuse + ambient, u_baseColor.a);
     }
 </script>
 <script type="notjs" id="fragement-shader-3d">
@@ -31,7 +41,11 @@
     }
 </script>
 <script type="text/javascript">
-    var modelRotator = [0, 0, 0];
+    var modelRotator = [15, -17, 0];
+    var lightColor = [1.0, 1.0, 1.0];//直射白光颜色
+    var lightPosition = [150, 100, 200];//位置
+    var ambientLightColor = [0.1, 0.1, 0.2];//环境光颜色
+
     function main(){
         var canvas = document.getElementById("c");
         var gl = canvas.getContext("webgl");
@@ -40,15 +54,23 @@
 
         var program = webglUtils.createProgramFromScripts(gl, ["vertex-shader-3d", "fragement-shader-3d"]);
         var a_position = gl.getAttribLocation(program, "a_position");
-        //var u_baseColor = gl.getUniformLocation(program, "u_baseColor");
-        var a_baseColor = gl.getAttribLocation(program, "a_baseColor");
+        var u_baseColor = gl.getUniformLocation(program, "u_baseColor");
+        // var a_baseColor = gl.getAttribLocation(program, "a_baseColor");
         var u_mvpMatrix = gl.getUniformLocation(program, "u_mvpMatrix");
+        var a_normal = gl.getAttribLocation(program, "a_normal");
+        var u_lightColor = gl.getUniformLocation(program, "u_lightColor");
+        var u_lightPosition = gl.getUniformLocation(program, "u_lightPosition");
+        var u_ambientLightColor = gl.getUniformLocation(program, "u_ambientLightColor");
 
         var positionBuffer = gl.createBuffer();
         var n = setGeometry();
+        // var n = setGeometry_Lines();
 
         var colorBuffer = gl.createBuffer();
         setColor();
+
+        var normalBuffer = gl.createBuffer();
+        setNormal();
 
         render();
 
@@ -69,15 +91,15 @@
             var near = -100;
             var far = 400;
             var projectMatrix = m4.orthographic(-gl.canvas.clientWidth, gl.canvas.clientWidth, -gl.canvas.clientHeight, gl.canvas.clientHeight, near, far);//p
-            var cameraPos = [0, 0, 200];
+            var cameraPos = [0, 0, 100];
             var target = [0.0, 0.0, 0.0];
             var up = [0, 1, 0];
             var cameraMatrix = m4.lookAt(cameraPos, target, up);
             var viewMatrix = m4.inverse(cameraMatrix);//v
             var modelMatrix = m4.identity();//m
-            modelMatrix = m4.xRotate(modelMatrix, modelRotator[0]);
-            modelMatrix = m4.yRotate(modelMatrix, modelRotator[1]);
-            modelMatrix = m4.zRotate(modelMatrix, modelRotator[2]);
+            modelMatrix = m4.xRotate(modelMatrix, radians(modelRotator[0]));
+            modelMatrix = m4.yRotate(modelMatrix, radians(modelRotator[1]));
+            modelMatrix = m4.zRotate(modelMatrix, radians(modelRotator[2]));
             var mvpMatrix = m4.multiply(projectMatrix, viewMatrix);
             mvpMatrix = m4.multiply(mvpMatrix, modelMatrix);
             gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrix);
@@ -86,11 +108,17 @@
             gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
             gl.vertexAttribPointer(a_position, 3, gl.FLOAT, false, 0, 0);
 
-            gl.enableVertexAttribArray(a_baseColor);
-            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-            gl.vertexAttribPointer(a_baseColor, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+            // gl.enableVertexAttribArray(a_baseColor);
+            // gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            // gl.vertexAttribPointer(a_baseColor, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+            gl.uniform4fv(u_baseColor, [0.2, 1, 0.2, 1]);
+            gl.uniform3fv(u_lightColor, lightColor);
+            gl.uniform3fv(u_lightPosition, m4.normalize(lightPosition));
+            gl.uniform3fv(u_ambientLightColor, m4.normalize(ambientLightColor));
 
-            //gl.uniform4fv(u_baseColor, [0.2, 1, 0.2, 1]);
+            gl.enableVertexAttribArray(a_normal);
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.vertexAttribPointer(a_normal, 3, gl.FLOAT, true, 0, 0);
 
 
             gl.drawArrays(gl.TRIANGLES, 0, n);
@@ -168,6 +196,19 @@
             return 6 * 6;
         }
 
+        function setGeometry_Lines() {
+            var positions = [
+                100, 100, 0,
+                100,100,-400,
+                -100,-100,-400,
+                -100,-100,0
+            ];
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+            return 4;
+        }
+
         function setColor(){
             var colors = [
                 // front
@@ -224,6 +265,60 @@
             gl.bufferData(gl.ARRAY_BUFFER, new Uint8Array(colors), gl.STATIC_DRAW);
         }
 
+        function setNormal(){
+            var normals = [
+                // v0-v1-v2-v3 front
+                0, 0, 1,//0
+                0, 0, 1,//1
+                0, 0, 1,//2
+                0, 0, 1,//0
+                0, 0, 1,//2
+                0, 0, 1,//3
+
+                // v0-v3-v4-v5 right
+                0, 1, 0,//0
+                0, 1, 0,//3
+                0, 1, 0,//4
+                0, 1, 0,//0
+                0, 1, 0,//4
+                0, 1, 0,//5
+
+                // v0-v5-v6-v1 up
+                1, 0, 0,//0
+                1, 0, 0,//5
+                1, 0, 0,//6
+                1, 0, 0,//0
+                1, 0, 0,//6
+                1, 0, 0,//1
+
+                // v1-v6-v7-v2 left
+                0, -1, 0,//1
+                0, -1, 0,//6
+                0, -1, 0,//7
+                0, -1, 0,//1
+                0, -1, 0,//7
+                0, -1, 0,//2
+
+                // v7-v4-v3-v2 bottom
+                -1, 0, 0,//7
+                -1, 0, 0,//4
+                -1, 0, 0,//3
+                -1, 0, 0,//7
+                -1, 0, 0,//3
+                -1, 0, 0,//2
+
+                // v4-v7-v6-v5 back
+                0, 0, -1,//4
+                0, 0, -1,//7
+                0, 0, -1,//6
+                0, 0, -1,//4
+                0, 0, -1,//6
+                0, 0, -1,//5
+            ];
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+        }
+
         //立方体
         function setCube(){
             var cubeVerticeInfo = primitives.createCubeVertices(10);
@@ -254,16 +349,17 @@
                         break;
                     default:return;
                 }
+                console.log("x:" + modelRotator[0] + ",y:" + modelRotator[1]);
             };
         }
 
-        function yAxis(value){
-            modelRotator[1] += radians(-(value * 50) % 360);
+        function xAxis(value){
+            modelRotator[0] -= value * 10 % 360;
             render();
         }
 
-        function xAxis(value){
-            modelRotator[0] += radians(-(value * 50) % 360);
+        function yAxis(value){
+            modelRotator[1] -= value * 10 % 360;
             render();
         }
     }
