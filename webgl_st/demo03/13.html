@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body onload="main()">
+    <canvas id="c" width="400" height="400">
+        not supported webgl
+    </canvas>
+</body>
+<script type="notjs" id="vertex-shader-sc">
+    attribute vec4 a_position;
+    uniform mat4 u_mvpMatrix;
+    void main(){
+        gl_Position = a_position;
+        gl_PointSize = 5.0;
+    }
+</script>
+<script type="notjs" id="fragment-shader-sc">
+    precision mediump float;
+    uniform float u_tick;
+    void main(){
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+</script>
+<script type="notjs" id="vertex-shader-sc2">
+    attribute vec4 a_position;
+    uniform mat4 u_mvpMatrix;
+    void main(){
+        gl_Position = u_mvpMatrix * a_position;
+        gl_PointSize = 5.0;
+    }
+</script>
+<script type="notjs" id="fragment-shader-sc2">
+    precision mediump float;
+    uniform float u_tick;
+    void main(){
+        gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+    }
+</script>
+<script type="text/javascript" src="lib/webgl-utils.js"></script>
+<script type="text/javascript" src="lib/m4.js"></script>
+<script type="text/javascript" src="lib/primitives.js"></script>
+<script type="text/javascript" src="script/Render.js"></script>
+<script type="text/javascript" src="script/WShader.js"></script>
+<script type="text/javascript" src="script/WObject.js"></script>
+<script type="text/javascript">
+    function main(){
+        var render = new Render("c");
+
+        var shader = new WShader();
+        var wObject = new WCubeObject(gl, shader);
+
+        var shader2 = new WShader("vertex-shader-sc2", "fragment-shader-sc2");
+        var wObject2 = new WObject(gl, shader2, {position: [50,50,0,   30,30,0,  50,30,0]});
+        //var wObject3 = new WPlaneObject(gl, shader);
+
+        render.addObject(wObject);
+        render.addObject(wObject2);
+        //render.addObject(wObject3);
+
+        render.render();
+    }
+
+</script>
+</html>
