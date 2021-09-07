@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>光照</title>
-    <style>
+<!--    <style>
         body {
             margin: 0;
         }
@@ -12,10 +12,10 @@
             height: 100vh;
             display: block;
         }
-    </style>
+    </style>-->
 </head>
 <body onload="main()">
-    <canvas id="c"></canvas>
+    <canvas id="c" width="400" height="400"></canvas>
 </body>
 <script type="text/javascript" src="lib/webgl-utils.js"></script>
 <script type="text/javascript" src="lib/m4.js"></script>
@@ -70,8 +70,8 @@
         float nDot = max(dot(normalize(v_surfaceDirection), normal),0.0);
         vec3 diffuse = v_lightColor * v_baseColor.rgb * nDot;//直射光漫反射
         vec3 ambient = vec3(v_ambientLightColor * v_baseColor.rgb);//环境光漫反射
-        //gl_FragColor = vec4(diffuse + ambient.rgb, v_baseColor.a);
-        gl_FragColor = texture2D(u_texture, v_texcoord) * vec4(abs(sin(u_time)), (diffuse + ambient.rgb).gb, v_baseColor.a);
+        gl_FragColor = vec4(diffuse + ambient.rgb, v_baseColor.a);
+        //gl_FragColor = texture2D(u_texture, v_texcoord) * vec4(abs(sin(u_time)), (diffuse + ambient.rgb).gb, v_baseColor.a);
     }
 </script>
 <script type="text/javascript">
@@ -88,7 +88,7 @@
         //环境光颜色
         let ambientLightColor = [0.1, 0.1, 0.1];
         //点光源位置
-        let lightPos = [20, 30, -800];
+        let lightPos = [20, 30, -400];
 
         var canvas = document.getElementById("c");
         var gl = canvas.getContext("webgl");
@@ -113,7 +113,9 @@
 
         var positionBuffer = gl.createBuffer();
         var n = setGeometry();
-        // var n = setGeometry_Lines();
+
+        var indicesBuffer = gl.createBuffer();
+        var eleN = setIndices();
 
         var colorBuffer = gl.createBuffer();
         setColor();
@@ -145,7 +147,7 @@
 
             //mvp
             var near = -800;
-            var far = 100000;
+            var far = 800;
             var projectMatrix = m4.orthographic(-gl.canvas.clientWidth, gl.canvas.clientWidth, -gl.canvas.clientHeight, gl.canvas.clientHeight, near, far);//p
             var cameraPos = [0, 0, 100];
             var target = [0.0, 0.0, 0.0];
@@ -156,7 +158,7 @@
             modelMatrix = m4.xRotate(modelMatrix, radians(modelRotator[0]));
             modelMatrix = m4.yRotate(modelMatrix, radians(modelRotator[1]));
             modelMatrix = m4.zRotate(modelMatrix, radians(modelRotator[2]));
-            modelMatrix = m4.scale(modelMatrix, 10, 10, 10);
+            modelMatrix = m4.scale(modelMatrix, 2, 2, 2);
             var mvpMatrix = m4.multiply(projectMatrix, viewMatrix);
             mvpMatrix = m4.multiply(mvpMatrix, modelMatrix);
             gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrix);
@@ -192,14 +194,14 @@
 
             var tick = (Date.now() - startTime) / 1000.0;
             gl.uniform1f(u_time, tick);
-            console.log(tick);
 
-            gl.drawArrays(gl.TRIANGLES, 0, n);
-            //gl.drawElements(gl.TRIANGLES, indicesLen, gl.UNSIGNED_BYTE, 0);
+            //gl.drawArrays(gl.TRIANGLES, 0, n);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+            gl.drawElements(gl.TRIANGLES, eleN, gl.UNSIGNED_BYTE, 0);
         }
 
         //几何体
-        function setGeometry() {
+        function setGeometryNotIndices() {
             // Create a cube
             //    v6----- v5
             //   /|      /|
@@ -229,8 +231,8 @@
                 50,-50,50,//3
                 50, 50, -50,//4
                 50, 50, -50,//0
-                50,-50,50,//4
-                50,-50,-50,//5
+                50,-50,-50,//4
+                50,50,-50,//5
 
                 // v0-v5-v6-v1 up
                 50, 50, 50,//0
@@ -269,17 +271,49 @@
             return 6 * 6;
         }
 
-        function setGeometry_Lines() {
-            var positions = [
-                100, 100, 0,
-                100,100,-400,
-                -100,-100,-400,
-                -100,-100,0
-            ];
+        function setGeometry() {
+            // Create a cube
+            //    v6----- v5
+            //   /|      /|
+            //  v1------v0|
+            //  | |     | |
+            //  | |v7---|-|v4
+            //  |/      |/
+            //  v2------v3
+            // 0, 1, 2,   0, 2, 3,    // 前
+            // 0, 3, 4,   0, 4, 5,    // 右
+            // 0, 5, 6,   0, 6, 1,    // 上
+            // 1, 6, 7,   1, 7, 2,    // 左
+            // 7, 4, 3,   7, 3, 2,    // 下
+            // 4, 7, 6,   4, 6, 5     // 后
 
+            var positions = [
+                50, 50, 50,//0
+                -50,50,50,//1
+                -50,-50,50,//2
+                50,-50,50,//3
+                50, -50, -50,//4
+                50,50,-50,//5
+                -50,50,-50,//6
+                -50,-50, -50,//7
+            ];
             gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
-            return 4;
+            return 8;
+        }
+
+        function setIndices(){
+            var indices = [
+                0, 1, 2,   0, 2, 3,    // 前
+                0, 3, 4,   0, 4, 5,    // 右
+                0, 5, 6,   0, 6, 1,    // 上
+                1, 6, 7,   1, 7, 2,    // 左
+                7, 4, 3,   7, 3, 2,    // 下
+                4, 7, 6,   4, 6, 5     // 后
+            ];
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint8Array(indices), gl.STATIC_DRAW);
+            return indices.length;
         }
 
         function setColor(){
@@ -526,7 +560,7 @@
         }
 
         function setupAnimatoin(){
-            requestAnimationFrame(rotateModel);
+            //requestAnimationFrame(rotateModel);
         }
 
         var lastTime = Date.now();
