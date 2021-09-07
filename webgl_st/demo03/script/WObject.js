@@ -21,14 +21,17 @@ var WObject = function(gl, shader, attriArrays) {
     //left, right, bottom, top, near, far, dst
     webglUtils.resizeCanvasToDisplaySize(gl.canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    var pMatrix = m4.orthographic(0, gl.canvas.clientWidth, 0, gl.canvas.clientHeight , 0, 100);
+    //var pMatrix = m4.orthographic(-gl.canvas.clientWidth, gl.canvas.clientWidth, -gl.canvas.clientHeight , gl.canvas.clientHeight , 0, 100);
+    var near = -800;
+    var far = 800;
+    var pMatrix = m4.orthographic(-gl.canvas.clientWidth, gl.canvas.clientWidth, -gl.canvas.clientHeight, gl.canvas.clientHeight, near, far);//p
     //var pMatrix = m4.identity();
     var cameraPos = [0, 0, 100];
     var cameraTarget = [0, 0, 0];
     var cameraUp = [0, 1, 0];
     var cameraMatrix = m4.lookAt(cameraPos, cameraTarget, cameraUp);
-    //var vMatrix = m4.inverse(cameraMatrix);
-    var vMatrix = m4.identity();
+    var vMatrix = m4.inverse(cameraMatrix);
+    //var vMatrix = m4.identity();
     var pvMatrix = m4.multiply(pMatrix, vMatrix);
     var mvpMatrix = m4.multiply(pvMatrix, this.modelMatrix);
 
@@ -56,7 +59,7 @@ var WObject = function(gl, shader, attriArrays) {
 
 var WCubeObject = function (gl, shader, opt) {
     var _opt = {
-        size : 50
+        size : 100
     }
     opt = opt || _opt;
     WCubeObject.prototype = new WObject(gl, shader, primitives.createCubeVertices(opt.size));
