@@ -3,20 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <title>透视投影继续肝</title>
+    <style>
+        body {
+            margin: 0;
+        }
+        canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+    </style>
 </head>
 <body onload="main()">
     <canvas id="c" width="800" height="800"></canvas>
 </body>
 <script type="notjs" id="vertext-shader-sc">
     attribute vec4 a_position;
+    attribute vec4 a_normal;
+    attribute vec4 a_color;
+    uniform mat4 u_mvpMatrix;
+    uniform mat4 u_normalMatrix;
+    uniform mat4 u_selfWorldposition;//顶点世界矩阵
+    uniform vec3 u_lightPosition;//点光源位置
+    uniform vec3 u_lightColor;//光源颜色
+    uniform vec3 u_ambientColor;//环境光颜色
+
+    varying vec4 v_normal;
+    varying vec3 v_surfaceDirection;//面相对于光源的方向
+    varying vec3 v_lightColor;//光源颜色
+    varying vec3 v_ambientColor;//环境光颜色
+    varying vec4 v_color;
+
+    void main(){
+        gl_Position = u_mvpMatrix * a_position;
+        v_normal =  normalize(u_normalMatrix * a_normal);
+        v_surfaceDirection = u_lightPosition - (u_selfWorldposition * a_position).xyz;
+        v_lightColor = u_lightColor;
+        v_ambientColor = u_ambientColor;
+        v_color = a_color;
+    }
+</script>
+<script type="notjs" id="fragment-shader-sc">
+    precision mediump float;
+
+    varying vec4 v_color;
+    varying vec4 v_normal;
+    varying vec3 v_surfaceDirection;//面相对于光源的方向
+    varying vec3 v_lightColor;//光源颜色
+    varying vec3 v_ambientColor;//环境光颜色
+
+    void main(){
+        vec3 normal = vec3(normalize(v_normal));
+        //光照计算
+        float lDot = max(dot(normalize(v_surfaceDirection), normal), 0.0);
+        vec3 diffuse = v_lightColor * v_color.rgb * lDot;
+        vec3 ambient = v_ambientColor * v_color.rgb;
+        gl_FragColor = vec4(diffuse + ambient, v_color.a);
+    }
+</script>
+<script type="notjs" id="sun-vertext-shader-sc">
+    attribute vec4 a_position;
     uniform mat4 u_mvpMatrix;
     void main(){
         gl_Position = u_mvpMatrix * a_position;
     }
 </script>
-<script type="notjs" id="fragment-shader-sc">
+<script type="notjs" id="sun-fragment-shader-sc">
     precision mediump float;
+
     uniform vec4 u_color;
+
     void main(){
         gl_FragColor = u_color;
     }
@@ -24,7 +80,11 @@
 <script type="text/javascript" src="lib/webgl-utils.js"></script>
 <script type="text/javascript" src="lib/m4.js"></script>
 <script type="text/javascript">
-    var cameraPosition = [0, 0, 2];
+    var modelRotation = [0, 0, 0];
+    var cameraTranslation = [0, 3.6, 5.3];
+    var lightTranslation = [-2.0, 4.0, 2.0];
+    var lightColor = [1.0, 1.0, 1.0];
+    var ambientColor = [0.1, 0.1, 0.1];
 
     function main(){
         var cavans = document.getElementById("c");
@@ -32,71 +92,280 @@
 
         var program = webglUtils.createProgramFromScripts(gl, ["vertext-shader-sc", "fragment-shader-sc"]);
         var a_position = gl.getAttribLocation(program, "a_position");
+        var a_normal = gl.getAttribLocation(program, "a_normal");
+        var u_normalMatrix = gl.getUniformLocation(program, "u_normalMatrix");
         var u_mvpMatrix = gl.getUniformLocation(program, "u_mvpMatrix");
+        var u_lightPosition = gl.getUniformLocation(program, "u_lightPosition");
+        var u_lightColor = gl.getUniformLocation(program, "u_lightColor");
+        var u_ambientColor = gl.getUniformLocation(program, "u_ambientColor");
         var u_color = gl.getUniformLocation(program, "u_color");
+        var a_color = gl.getAttribLocation(program, "a_color");
+
+        var sunProgram = webglUtils.createProgramFromScripts(gl, ["sun-vertext-shader-sc", "sun-fragment-shader-sc"]);
+        var sun_position = gl.getAttribLocation(sunProgram, "a_position");
+        var sun_color = gl.getUniformLocation(sunProgram, "u_color");
+        var sun_mvpMatrix = gl.getUniformLocation(sunProgram, "u_mvpMatrix");
 
         var vertextBuffer = gl.createBuffer();
         var numVertex = setGeometry();
 
-        requestAnimationFrame(draw);
-        //draw();
+        var colorBuffer = gl.createBuffer();
+        setColor();
+
+        var normalBuffer = gl.createBuffer();
+        setNormal();
+
+        //requestAnimationFrame(draw);
+        draw();
 
         setupEvent();
 
         function draw(){
-            gl.clearColor(0.2, 0.3, 0.3, 1.0);
+            webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+            gl.viewport(0, 0, gl.canvas.clientWidth, gl.canvas.clientHeight);
+            gl.clearColor(0.1, 0.1, 0.1, 1.0);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             gl.enable(gl.DEPTH_TEST);
             gl.enable(gl.CULL_FACE);
 
             gl.useProgram(program);
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertextBuffer);
             gl.enableVertexAttribArray(a_position);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertextBuffer);
             gl.vertexAttribPointer(a_position, 3, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(a_color);
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            gl.vertexAttribPointer(a_color, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+            gl.enableVertexAttribArray(a_normal);
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.vertexAttribPointer(a_normal, 3, gl.FLOAT, true, 0, 0);
 
-            var x = 0.0;
-            var y = 0.0;
-            var z = 0.0;
-            var randColor = [0.0, 0.2, 0.2];
-            for(var i = 0; i < 6; i++){
-                if(i < 3){
-                    x = -0.3;
-                    z += 0.05;
-                    y += 0.1;
-                }else{
-                    x = 0.5;
-                    z -= 0.05;
-                    y += 0.1;
-                }
-                randColor[0] += 0.1;
-                randColor[1] += 0.1;
-                randColor[2] += 0.1;
+            //灯光
+            gl.uniform3fv(u_lightPosition, lightTranslation);
+            gl.uniform3fv(u_lightColor, lightColor);
+            gl.uniform3fv(u_ambientColor, ambientColor);
 
-                //var projectionMatrix = m4.orthographic(-1, 1, -1, 1, 1, -1);
-                var projectionMatrix = m4.perspective(degToRad(60.0), 1, 1, -1);
-                var cameraMatrix = m4.lookAt(cameraPosition, [0, 0, -1], [0, 1, 0]);
-                var viewMatrix = m4.inverse(cameraMatrix);
-                var modelWorldMatrix = m4.translate(m4.identity(), x, y, z);
-                var mvpMatrix = m4.multiply(projectionMatrix, viewMatrix);
-                mvpMatrix = m4.multiply(mvpMatrix, modelWorldMatrix);
+            //var projectionMatrix = m4.orthographic(-1, 1, -1, 1, 1, -1);
+            var projectionMatrix = m4.perspective(degToRad(60.0), gl.canvas.clientWidth / gl.canvas.clientHeight, 1, -20);
+            var cameraMatrix = m4.lookAt(cameraTranslation, [0, 0, 0], [0, 1, 0]);
+            var viewMatrix = m4.inverse(cameraMatrix);
 
-                gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrix)
-                gl.uniform4fv(u_color, [randColor[0], randColor[1], randColor[2], 1.0])
+            var modelWorldMatrix = m4.translate(m4.identity(), 0, 0, 0);
+            modelWorldMatrix = m4.scale(modelWorldMatrix, 5, 0.5, 2);
+            modelWorldMatrix = m4.yRotate(modelWorldMatrix, degToRad(modelRotation[1]))
+            var mvpMatrix = m4.multiply(projectionMatrix, viewMatrix);
+            mvpMatrix = m4.multiply(mvpMatrix, modelWorldMatrix);
+            gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrix)
+
+            var normalMatrix = m4.inverse(modelWorldMatrix);
+            m4.transpose(normalMatrix, normalMatrix);
+            gl.uniformMatrix4fv(u_normalMatrix, false, normalMatrix);
+
+            gl.drawArrays(gl.TRIANGLES, 0 , numVertex);
+
+            //随机绘画个10个
+            var angle = 10;
+            for(var i = 0; i < 10; i++){
+                var modelWorldMatrixN = m4.translate(m4.identity(), Math.random() * 10 - 10, Math.random() * 10 - 10, Math.random() * 10 - 10);
+                modelWorldMatrixN = m4.yRotate(modelWorldMatrixN, degToRad(++angle))
+                var mvpMatrixN = m4.multiply(projectionMatrix, viewMatrix);
+                mvpMatrixN = m4.multiply(mvpMatrixN, modelWorldMatrixN);
+                gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrixN);
+
+                var normalMatrixN = m4.inverse(modelWorldMatrixN);
+                m4.transpose(normalMatrixN, normalMatrixN);
+                gl.uniformMatrix4fv(u_normalMatrix, false, normalMatrixN);
+
                 gl.drawArrays(gl.TRIANGLES, 0 , numVertex);
             }
 
-            requestAnimationFrame(draw);
+
+            //绘制灯
+            gl.useProgram(sunProgram);
+            gl.enableVertexAttribArray(sun_position);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertextBuffer);
+            gl.vertexAttribPointer(sun_position, 3, gl.FLOAT, false, 0, 0);
+            var modelWorldMatrix2 = m4.translate(m4.identity(), lightTranslation[0], lightTranslation[1], lightTranslation[2]);
+            modelWorldMatrix2 = m4.scale(modelWorldMatrix2, 0.2, 0.2, 0.2);
+            var mvpMatrix2 = m4.multiply(projectionMatrix, viewMatrix);
+            mvpMatrix2 = m4.multiply(mvpMatrix2, modelWorldMatrix2);
+            gl.uniformMatrix4fv(sun_mvpMatrix, false, mvpMatrix2);
+            gl.uniform4f(sun_color, lightColor[0], lightColor[1], lightColor[2], 1.0);
+
+            gl.drawArrays(gl.TRIANGLES, 0 , numVertex);
+
+            //requestAnimationFrame(draw);
         }
 
         function setGeometry(){
-            var position = [
-                0.0, 0.2, 0.0,
-                -0.4, -0.4, 0.0,
-                0.4, -0.4, 0.0
+            //    v6----- v5
+            //   /|      /|
+            //  v1------v0|
+            //  | |     | |
+            //  | |v7---|-|v4
+            //  |/      |/
+            //  v2------v3
+            var positions = [
+                // v0-v1-v2-v3 front
+                0.5, 0.5, 0.5,//0
+                -0.5,0.5,0.5,//1
+                -0.5,-0.5,0.5,//2
+                0.5,0.5,0.5,//0
+                -0.5,-0.5,0.5,//2
+                0.5,-0.5,0.5,//3
+
+                // v0-v3-v4-v5 right
+                0.5, 0.5, 0.5,//0
+                0.5,-0.5,0.5,//3
+                0.5, -0.5, -0.5,//4
+                0.5, 0.5, 0.5,//0
+                0.5,-0.5,-0.5,//4
+                0.5,0.5,-0.5,//5
+
+                // v0-v5-v6-v1 up
+                0.5, 0.5, 0.5,//0
+                0.5,0.5,-0.5,//5
+                -0.5,0.5,-0.5,//6
+                0.5, 0.5, 0.5,//0
+                -0.5,0.5,-0.5,//6
+                -0.5,0.5,0.5,//1
+
+                // v1-v6-v7-v2 left
+                -0.5, 0.5, 0.5,//1
+                -0.5, 0.5, -0.5,//6
+                -0.5,-0.5, -0.5,//7
+                -0.5, 0.5, 0.5,//1
+                -0.5,-0.5, -0.5,//7
+                -0.5,-0.5,0.5,//2
+
+                // v7-v4-v3-v2 bottom
+                -0.5,-0.5,-0.5,//7
+                0.5,-0.5,-0.5,//4
+                0.5,-0.5,0.5,//3
+                -0.5,-0.5,-0.5,//7
+                0.5,-0.5,0.5,//3
+                -0.5,-0.5,0.5,//2
+
+                // v4-v7-v6-v5 back
+                0.5,-0.5,-0.5,//4
+                -0.5,-0.5,-0.5,//7
+                -0.5, 0.5, -0.5,//6
+                0.5,-0.5,-0.5,//4
+                -0.5, 0.5, -0.5,//6
+                0.5,0.5,-0.5,//5
             ];
             gl.bindBuffer(gl.ARRAY_BUFFER, vertextBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(position), gl.STATIC_DRAW);
-            return position.length / 3;
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+            return positions.length / 3;
+        }
+
+        function setColor(){
+            var colors = [
+                // front
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+
+
+                // right
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+
+                // top
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+
+                //left
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+
+                //bottom
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+
+                //back
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+                95, 158, 160,
+            ];
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Uint8Array(colors), gl.STATIC_DRAW);
+        }
+
+        function setNormal(){
+            var normals = [
+                // v0-v1-v2-v3 front
+                0, 0, 1,//0
+                0, 0, 1,//1
+                0, 0, 1,//2
+                0, 0, 1,//0
+                0, 0, 1,//2
+                0, 0, 1,//3
+
+                // v0-v3-v4-v5 right
+                1, 0, 0,//0
+                1, 0, 0,//5
+                1, 0, 0,//6
+                1, 0, 0,//0
+                1, 0, 0,//6
+                1, 0, 0,//1
+
+                // v0-v5-v6-v1 up
+                0, 1, 0,//0
+                0, 1, 0,//3
+                0, 1, 0,//4
+                0, 1, 0,//0
+                0, 1, 0,//4
+                0, 1, 0,//5
+
+                // v1-v6-v7-v2 left
+                -1, 0, 0,//7
+                -1, 0, 0,//4
+                -1, 0, 0,//3
+                -1, 0, 0,//7
+                -1, 0, 0,//3
+                -1, 0, 0,//2
+
+                // v7-v4-v3-v2 bottom
+                0, -1, 0,//1
+                0, -1, 0,//6
+                0, -1, 0,//7
+                0, -1, 0,//1
+                0, -1, 0,//7
+                0, -1, 0,//2
+
+                // v4-v7-v6-v5 back
+                0, 0, -1,//4
+                0, 0, -1,//7
+                0, 0, -1,//6
+                0, 0, -1,//4
+                0, 0, -1,//6
+                0, 0, -1,//5
+            ];
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
         }
 
         function setupEvent(){
@@ -114,20 +383,42 @@
                     case 68:
                         moveRight(0.1);
                         break;
+                    case 81:
+                        moveUp(0.1);
+                        break;
+                    case 69:
+                        moveUp(-0.1);
+                        break;
+                    case 90:
+                        turn(0.1);
+                        break;
+                    case 88:
+                        turn(-0.1);
+                        break;
                     default:
                         return;
                 }
+                draw();
             });
         }
 
         function moveForward(val){
-            cameraPosition[2] -= val * 0.1;
-            console.log(cameraPosition)
+            cameraTranslation[2] -= val;
+            console.log(cameraTranslation)
+        }
+
+        function moveUp(val){
+            cameraTranslation[1] += val;
+            console.log(cameraTranslation)
         }
 
         function moveRight(val){
-            cameraPosition[0] += val * 0.1;
-            console.log(cameraPosition)
+            cameraTranslation[0] += val;
+            console.log(cameraTranslation)
+        }
+
+        function turn(val){
+            lightTranslation[0] += val //* 10;
         }
     }
 
