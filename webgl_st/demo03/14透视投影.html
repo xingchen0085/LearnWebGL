@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>透视投影继续肝</title>
+</head>
+<body onload="main()">
+    <canvas id="c" width="800" height="800"></canvas>
+</body>
+<script type="notjs" id="vertext-shader-sc">
+    attribute vec4 a_position;
+    uniform mat4 u_mvpMatrix;
+    void main(){
+        gl_Position = u_mvpMatrix * a_position;
+    }
+</script>
+<script type="notjs" id="fragment-shader-sc">
+    precision mediump float;
+    uniform vec4 u_color;
+    void main(){
+        gl_FragColor = u_color;
+    }
+</script>
+<script type="text/javascript" src="lib/webgl-utils.js"></script>
+<script type="text/javascript" src="lib/m4.js"></script>
+<script type="text/javascript">
+    var cameraPosition = [0, 0, 2];
+
+    function main(){
+        var cavans = document.getElementById("c");
+        var gl = cavans.getContext("webgl");
+
+        var program = webglUtils.createProgramFromScripts(gl, ["vertext-shader-sc", "fragment-shader-sc"]);
+        var a_position = gl.getAttribLocation(program, "a_position");
+        var u_mvpMatrix = gl.getUniformLocation(program, "u_mvpMatrix");
+        var u_color = gl.getUniformLocation(program, "u_color");
+
+        var vertextBuffer = gl.createBuffer();
+        var numVertex = setGeometry();
+
+        requestAnimationFrame(draw);
+        //draw();
+
+        setupEvent();
+
+        function draw(){
+            gl.clearColor(0.2, 0.3, 0.3, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.CULL_FACE);
+
+            gl.useProgram(program);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertextBuffer);
+            gl.enableVertexAttribArray(a_position);
+            gl.vertexAttribPointer(a_position, 3, gl.FLOAT, false, 0, 0);
+
+            var x = 0.0;
+            var y = 0.0;
+            var z = 0.0;
+            var randColor = [0.0, 0.2, 0.2];
+            for(var i = 0; i < 6; i++){
+                if(i < 3){
+                    x = -0.3;
+                    z += 0.05;
+                    y += 0.1;
+                }else{
+                    x = 0.5;
+                    z -= 0.05;
+                    y += 0.1;
+                }
+                randColor[0] += 0.1;
+                randColor[1] += 0.1;
+                randColor[2] += 0.1;
+
+                //var projectionMatrix = m4.orthographic(-1, 1, -1, 1, 1, -1);
+                var projectionMatrix = m4.perspective(degToRad(60.0), 1, 1, -1);
+                var cameraMatrix = m4.lookAt(cameraPosition, [0, 0, -1], [0, 1, 0]);
+                var viewMatrix = m4.inverse(cameraMatrix);
+                var modelWorldMatrix = m4.translate(m4.identity(), x, y, z);
+                var mvpMatrix = m4.multiply(projectionMatrix, viewMatrix);
+                mvpMatrix = m4.multiply(mvpMatrix, modelWorldMatrix);
+
+                gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrix)
+                gl.uniform4fv(u_color, [randColor[0], randColor[1], randColor[2], 1.0])
+                gl.drawArrays(gl.TRIANGLES, 0 , numVertex);
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        function setGeometry(){
+            var position = [
+                0.0, 0.2, 0.0,
+                -0.4, -0.4, 0.0,
+                0.4, -0.4, 0.0
+            ];
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertextBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(position), gl.STATIC_DRAW);
+            return position.length / 3;
+        }
+
+        function setupEvent(){
+            document.addEventListener("keydown", function (ev) {
+                switch (ev.keyCode) {
+                    case 87:
+                        moveForward(0.1);
+                        break;
+                    case 83:
+                        moveForward(-0.1);
+                        break;
+                    case 65:
+                        moveRight(-0.1);
+                        break;
+                    case 68:
+                        moveRight(0.1);
+                        break;
+                    default:
+                        return;
+                }
+            });
+        }
+
+        function moveForward(val){
+            cameraPosition[2] -= val * 0.1;
+            console.log(cameraPosition)
+        }
+
+        function moveRight(val){
+            cameraPosition[0] += val * 0.1;
+            console.log(cameraPosition)
+        }
+    }
+
+    function degToRad(d){
+        return d * Math.PI / 180;
+    }
+
+    function radToDeg(r) {
+        return r * 180 / Math.PI;
+    }
+</script>
+</html>
