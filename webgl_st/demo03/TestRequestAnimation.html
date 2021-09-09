@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+</body>
+<script>
+    getReqCallback();
+
+    function getReqCallback() {
+        var count = 0;
+        var start = null;
+        var lastTimestamp = null;
+        var delta = 0;
+        return function req(timestamp) {
+            if (start === null ) {
+                start = timestamp;
+                lastTimestamp = timestamp;
+            }
+            count++;
+            delta = timestamp - lastTimestamp;
+            console.log(delta + 'ms');
+            lastTimestamp = timestamp;
+            //if (count < 100) {
+                requestAnimationFrame(req);
+            //}
+        }
+    }
+    requestAnimationFrame(getReqCallback())
+</script>
+</html>

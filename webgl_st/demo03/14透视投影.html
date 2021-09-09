@@ -3,19 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <title>透视投影继续肝</title>
-    <style>
-        body {
+   <style>
+       body {
             margin: 0;
         }
+
         canvas {
             width: 100vw;
             height: 100vh;
             display: block;
         }
+       p {
+           font-size: smaller;
+       }
     </style>
 </head>
 <body onload="main()">
-    <canvas id="c" width="800" height="800"></canvas>
+    <canvas id="c" width="400" height="400"></canvas>
+    <div>
+        <p >
+            <div id="showfps" style="width: 100px;float: left"></div>
+            <div id="showtime" style="width: 100px;float: left"></div>
+        </p>
+        <p id="showMouseXY"></p>
+    </div>
 </body>
 <script type="notjs" id="vertext-shader-sc">
     attribute vec4 a_position;
@@ -25,21 +36,15 @@
     uniform mat4 u_normalMatrix;
     uniform mat4 u_selfWorldposition;//顶点世界矩阵
     uniform vec3 u_lightPosition;//点光源位置
-    uniform vec3 u_lightColor;//光源颜色
-    uniform vec3 u_ambientColor;//环境光颜色
 
     varying vec4 v_normal;
     varying vec3 v_surfaceDirection;//面相对于光源的方向
-    varying vec3 v_lightColor;//光源颜色
-    varying vec3 v_ambientColor;//环境光颜色
     varying vec4 v_color;
 
     void main(){
         gl_Position = u_mvpMatrix * a_position;
         v_normal =  normalize(u_normalMatrix * a_normal);
-        v_surfaceDirection = u_lightPosition - (u_selfWorldposition * a_position).xyz;
-        v_lightColor = u_lightColor;
-        v_ambientColor = u_ambientColor;
+        v_surfaceDirection = normalize(u_lightPosition - (u_selfWorldposition * a_position).xyz);
         v_color = a_color;
     }
 </script>
@@ -49,15 +54,17 @@
     varying vec4 v_color;
     varying vec4 v_normal;
     varying vec3 v_surfaceDirection;//面相对于光源的方向
-    varying vec3 v_lightColor;//光源颜色
-    varying vec3 v_ambientColor;//环境光颜色
+    uniform vec3 u_lightColor;//光源颜色
+    uniform vec3 u_ambientColor;//环境光颜色
+    uniform float u_lightIntensity;//点光源光照强度
+    uniform float u_ambientIntensity;//环境光照强度
 
     void main(){
         vec3 normal = vec3(normalize(v_normal));
         //光照计算
         float lDot = max(dot(normalize(v_surfaceDirection), normal), 0.0);
-        vec3 diffuse = v_lightColor * v_color.rgb * lDot;
-        vec3 ambient = v_ambientColor * v_color.rgb;
+        vec3 diffuse = u_lightIntensity * (u_lightColor * v_color.rgb * lDot);
+        vec3 ambient = u_ambientIntensity * (u_ambientColor * v_color.rgb);
         gl_FragColor = vec4(diffuse + ambient, v_color.a);
     }
 </script>
@@ -80,11 +87,19 @@
 <script type="text/javascript" src="lib/webgl-utils.js"></script>
 <script type="text/javascript" src="lib/m4.js"></script>
 <script type="text/javascript">
-    var modelRotation = [0, 0, 0];
-    var cameraTranslation = [0, 3.6, 5.3];
-    var lightTranslation = [-2.0, 4.0, 2.0];
+    var modelRotation = [0.0, 0.0, 0.0];
+
+    var cameraTranslation = [0.0, 2.8, 7.5];
+    var cameraTarget = [0.0, 0.0, -1.0];
+    var cameraUp = [0.0, 1.0, 0.0];
+
+    var lightTranslation = [-2.0, 6.0, 2.0];
     var lightColor = [1.0, 1.0, 1.0];
     var ambientColor = [0.1, 0.1, 0.1];
+    var lightIntensity = 1.0;
+    var ambientIntensity = 0.3;
+    var cubeNum = 10;
+    var randomTransltation = [];
 
     function main(){
         var cavans = document.getElementById("c");
@@ -98,7 +113,8 @@
         var u_lightPosition = gl.getUniformLocation(program, "u_lightPosition");
         var u_lightColor = gl.getUniformLocation(program, "u_lightColor");
         var u_ambientColor = gl.getUniformLocation(program, "u_ambientColor");
-        var u_color = gl.getUniformLocation(program, "u_color");
+        var u_lightIntensity = gl.getUniformLocation(program, "u_lightIntensity");
+        var u_ambientIntensity = gl.getUniformLocation(program, "u_ambientIntensity");
         var a_color = gl.getAttribLocation(program, "a_color");
 
         var sunProgram = webglUtils.createProgramFromScripts(gl, ["sun-vertext-shader-sc", "sun-fragment-shader-sc"]);
@@ -115,12 +131,25 @@
         var normalBuffer = gl.createBuffer();
         setNormal();
 
-        //requestAnimationFrame(draw);
-        draw();
+        for(var i = 0;i < cubeNum; i++){
+            randomTransltation.push([Math.random() * 10.0 - 5.0, Math.random() * 10.0 - 5.0, Math.random() * 10.0 - 5.0]);
+        }
 
         setupEvent();
 
-        function draw(){
+        var deltaTime = 0.0;
+        var lastTimestamp = undefined;
+        function anima(timestamp){
+            return draw(timestamp);
+        }
+
+        function draw(timestamp){
+            if(!lastTimestamp){
+                lastTimestamp = timestamp;
+            }
+            deltaTime = timestamp - lastTimestamp;
+            displayFPS(deltaTime);
+            lastTimestamp = timestamp;
             webglUtils.resizeCanvasToDisplaySize(gl.canvas);
             gl.viewport(0, 0, gl.canvas.clientWidth, gl.canvas.clientHeight);
             gl.clearColor(0.1, 0.1, 0.1, 1.0);
@@ -143,10 +172,12 @@
             gl.uniform3fv(u_lightPosition, lightTranslation);
             gl.uniform3fv(u_lightColor, lightColor);
             gl.uniform3fv(u_ambientColor, ambientColor);
+            gl.uniform1f(u_lightIntensity, lightIntensity);
+            gl.uniform1f(u_ambientIntensity, ambientIntensity);
 
             //var projectionMatrix = m4.orthographic(-1, 1, -1, 1, 1, -1);
             var projectionMatrix = m4.perspective(degToRad(60.0), gl.canvas.clientWidth / gl.canvas.clientHeight, 1, -20);
-            var cameraMatrix = m4.lookAt(cameraTranslation, [0, 0, 0], [0, 1, 0]);
+            var cameraMatrix = m4.lookAt(cameraTranslation,  m4.addVectors(cameraTranslation, cameraTarget), cameraUp);
             var viewMatrix = m4.inverse(cameraMatrix);
 
             var modelWorldMatrix = m4.translate(m4.identity(), 0, 0, 0);
@@ -162,11 +193,10 @@
 
             gl.drawArrays(gl.TRIANGLES, 0 , numVertex);
 
-            //随机绘画个10个
             var angle = 10;
-            for(var i = 0; i < 10; i++){
-                var modelWorldMatrixN = m4.translate(m4.identity(), Math.random() * 10 - 10, Math.random() * 10 - 10, Math.random() * 10 - 10);
-                modelWorldMatrixN = m4.yRotate(modelWorldMatrixN, degToRad(++angle))
+            for(var i = 0; i < cubeNum; i++){
+                var modelWorldMatrixN = m4.translate(m4.identity(), randomTransltation[i][0], randomTransltation[i][1], randomTransltation[i][2]);
+                modelWorldMatrixN = m4.yRotate(modelWorldMatrixN, degToRad(angle += angle))
                 var mvpMatrixN = m4.multiply(projectionMatrix, viewMatrix);
                 mvpMatrixN = m4.multiply(mvpMatrixN, modelWorldMatrixN);
                 gl.uniformMatrix4fv(u_mvpMatrix, false, mvpMatrixN);
@@ -193,7 +223,22 @@
 
             gl.drawArrays(gl.TRIANGLES, 0 , numVertex);
 
-            //requestAnimationFrame(draw);
+            requestAnimationFrame(draw);
+        }
+
+        requestAnimationFrame(anima);
+
+        var lastShowTime = 0;
+        function displayFPS(deltaTime){
+            if(deltaTime < 2.0 || lastShowTime < 50){
+                lastShowTime += deltaTime;
+                return;
+            }
+            //FPS
+            var fps = Math.floor(1000.0 / deltaTime);
+            document.getElementById("showfps").innerText  = "FPS:" + fps;
+            document.getElementById("showtime").innerText  = Math.round(deltaTime) + "ms";
+            lastShowTime = 0;
         }
 
         function setGeometry(){
@@ -369,56 +414,131 @@
         }
 
         function setupEvent(){
-            document.addEventListener("keydown", function (ev) {
-                switch (ev.keyCode) {
-                    case 87:
-                        moveForward(0.1);
-                        break;
-                    case 83:
-                        moveForward(-0.1);
-                        break;
-                    case 65:
-                        moveRight(-0.1);
-                        break;
-                    case 68:
-                        moveRight(0.1);
-                        break;
-                    case 81:
-                        moveUp(0.1);
-                        break;
-                    case 69:
-                        moveUp(-0.1);
-                        break;
-                    case 90:
-                        turn(0.1);
-                        break;
-                    case 88:
-                        turn(-0.1);
-                        break;
-                    default:
-                        return;
-                }
-                draw();
-            });
+            document.addEventListener("keydown", onkeyEvent);
+            cavans.addEventListener("mousedown", onMouseEvent('in'));
+            cavans.addEventListener("mousemove", onMouseEvent('move'));
+            cavans.addEventListener("mouseup", onMouseEvent('out'));
+            cavans.addEventListener("mouseout", onMouseEvent('out'));
+        }
+
+        function onkeyEvent(ev){
+            switch (ev.keyCode) {
+                case 87:
+                    moveForward(0.1);
+                    break;
+                case 83:
+                    moveForward(-0.1);
+                    break;
+                case 65:
+                    moveRight(-0.1);
+                    break;
+                case 68:
+                    moveRight(0.1);
+                    break;
+                case 81:
+                    moveUp(0.1);
+                    break;
+                case 69:
+                    moveUp(-0.1);
+                    break;
+                case 90:
+                    turn(0.1);
+                    break;
+                case 88:
+                    turn(-0.1);
+                    break;
+                default:
+                    return;
+            }
         }
 
         function moveForward(val){
-            cameraTranslation[2] -= val;
-            console.log(cameraTranslation)
+            cameraTranslation = m4.addVectors(cameraTranslation, vecMuliNum(cameraTarget, val));
+            //console.log(cameraTranslation)
         }
 
         function moveUp(val){
-            cameraTranslation[1] += val;
-            console.log(cameraTranslation)
+            cameraTranslation = m4.addVectors(cameraTranslation, vecMuliNum(cameraUp, val));
+            //console.log(cameraTranslation)
         }
 
         function moveRight(val){
-            cameraTranslation[0] += val;
-            console.log(cameraTranslation)
+            //根据 target 和 up 叉积出出 x 向量; 标准化，只需要方向
+            var xVector = m4.cross(m4.normalize(cameraTarget), m4.normalize(cameraUp));
+            cameraTranslation = m4.addVectors(cameraTranslation, vecMuliNum(xVector, val));
+            //console.log(cameraTranslation);
         }
 
         function turn(val){
-            lightTranslation[0] += val //* 10;
+            modelRotation[1] += val * 10;
+        }
+
+        var lastMouseXY = [];
+        var pitch = 0.0;
+        var yaw = 90.0;
+        var mouseFirstInCanvas = false;
+
+        function onMouseEvent(type){
+            switch (type) {
+                case 'in':
+                    return function (ev){
+                        console.log("start.")
+                        //鼠标距离最左边
+                        var mX = ev.clientX;
+                        var mY = ev.clientY;
+                        lastMouseXY[0] = mX;
+                        lastMouseXY[1] = mY;
+                        mouseFirstInCanvas = true;
+                    }
+                    break;
+                case 'move':
+                    return function (ev){
+                        if(!mouseFirstInCanvas){
+                            return false;
+                        }
+                        //鼠标距离最左边
+                        var mX = ev.clientX;
+                        var mY = ev.clientY;
+
+                        //x方向偏移量
+                        var xOffset = mX - lastMouseXY[0];
+                        var yOffset = mY - lastMouseXY[1];
+
+                        console.log(xOffset + "," + yOffset);
+                        document.getElementById("showMouseXY").innerText = "当前鼠标坐标：" + mX + "," + mY;
+
+                        // yaw 围绕 y轴， 偏航角
+                        // pitch 围绕x轴，俯仰角
+                        // roll 围绕z轴，翻滚角
+                        pitch += yOffset * 0.2;
+                        yaw += xOffset * 0.2;
+                        if(pitch >= 90.0){
+                            pitch = 90.0;
+                        }
+                        if(pitch <= -90.0){
+                            pitch = -90.0;
+                        }
+                        cameraTarget[0] = Math.cos(degToRad(yaw)) * Math.cos(degToRad(pitch));
+                        cameraTarget[1] = Math.sin(degToRad(pitch));
+
+                        lastMouseXY[0] = mX;
+                        lastMouseXY[1] = mY;
+                    }
+                    break;
+                case 'out':
+                    return function (ev){
+                        console.log("end.")
+                        //鼠标距离最左边
+                        var mX = ev.clientX;
+                        var mY = ev.clientY;
+                        lastMouseXY[0] = mX;
+                        lastMouseXY[1] = mY;
+                        mouseFirstInCanvas = false;
+                    }
+                    break;
+                default:
+                    return;
+            }
         }
     }
 
@@ -429,5 +549,34 @@
     function radToDeg(r) {
         return r * 180 / Math.PI;
     }
+
+    /**
+     * 向量 * 标量
+     * @param v1
+     * @param num
+     * @returns {*[]}
+     * @constructor
+     */
+    function vecMuliNum(v1, num){
+        var res = [];
+        for(var i = 0; i < v1.length; i++){
+            res[i] = v1[i] * num;
+        }
+        return res;
+    }
 </script>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
